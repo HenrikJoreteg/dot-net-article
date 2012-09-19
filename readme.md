@@ -1,4 +1,6 @@
-# .net article - Build a realtime web app with Backbone.js for voting on where to go to lunch
+# .net article - Building "Food Fight!" 
+
+a realtime web app with Backbone.js for figuring out where your team should go for lunch
 
 1. Introduction
     1. "realtime"
