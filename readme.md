@@ -28,7 +28,7 @@ Below is the entirety of the html we send to the browser for our product And Ban
 <script src="/&!.js"></script>
 ```
 
-Yup, that’s it (and yes, omitting <html>, <head>, and <body> is allowed by the HTML specs).
+Yup, that’s it (and yes, omitting `<html>`, `<head>`, and `<body>` is allowed by the HTML specs).
 
 The purpose of this extreme minimalism is primarily aesthetic. But, it also makes it  *abundantly* clear that it’s the client’s responsibility to render the application and manage everything within it.
 
@@ -44,6 +44,26 @@ We’ll try to keep the scope fairly narrow, but I’ll be sure to throw in some
 
 ## Basic setup
 You’ll need node.js 0.8+ and npm installed on your system (these days, npm ships with node). I’m assuming a mac or linux environment, but with very minor tweaks you should be able to follow along just fine if you’re on windows.
+
+If you want to follow along from scratch, we'll create a folder structure that looks like this:
+
+```
+├── clientapp
+│   ├── models - folder for our backbone models
+│   ├── views - folder for backbone views
+│   ├── apiHandler.js
+│   ├── app.js
+│   └── router.js (our backbone router)
+├── clientmodules - flat folder of all our single-file modules like backbone.js, underscore, etc.
+├── clienttemplates - folder of our clientside jade templates
+├── public - folder of our public, static resources
+│
+├── app.html - main app html
+├── dev_config.json - our config file
+├── package.json - package description
+├── README.md
+└── server.js - Main application file
+```
 
 First we know we’ll need to install some stuff. Create a new folder for your project and create a package.json file in it that looks something like this:
 
@@ -96,9 +116,7 @@ and begin listening for requests.
 var express = require('express'),
     stitch = require('stitch'),
     andbangAuth = require('andbang-express-auth'),
-    config = require('getconfig'),
-    templatizer = require('templatizer'),
-    yetify = require('yetify');
+    templatizer = require('templatizer');
 
 // build our client templates into vanilla javascript
 templatizer(__dirname + '/clienttemplates', __dirname + '/clientmodules/templates.js');
@@ -127,8 +145,8 @@ app.use(express.cookieParser());
 app.use(express.session({ secret: 'neat-o bandit-o' }));
 app.use(andbangAuth.middleware({
     app: app,
-    clientId: config.oauth.clientId,
-    clientSecret: config.oauth.secret,
+    clientId: 'andbang-client',
+    clientSecret: 'dev-client-secret',
     defaultRedirect: '/',
     loginPageUrl: '/auth'
 }));
@@ -153,9 +171,38 @@ app.get('/token', andbangAuth.secure(), function (req, res) {
 });
 
 // start listening for requests
-app.listen(config.http.port);
+app.listen(3003);
 
 // write some helpful log output
-console.log('Dashboard is running at: http://localhost:' + config.http.port + ' Yep. That\'s pretty awesome.');
+console.log('Dashboard is running at: http://localhost:3003. Yep. That\'s pretty awesome.');
 ```
+
+## Breaking it down part 1: Auth
+You'll see we're using some middleware to handle oauth with And Bang for us. For this to work, you'll need to enter you client ID and secret.
+
+```js
+app.use(andbangAuth.middleware({
+    app: app,
+    clientId: '<< YOUR CLIENT APP ID >>',
+    clientSecret: '<< YOUR APP SECRET >>',
+    defaultRedirect: '/',
+    loginPageUrl: '/auth'
+}));
+```
+
+Then, by securing the main route with the auth middleware, you'll immediately be re-directed to log in via andbang. You can see that in action here. Note the `andbangAuth.secure()` middleware:
+```
+app.get('/', andbangAuth.secure(), function (req, res) {
+    res.sendfile(__dirname + '/app.html');
+});
+```
+
+## Breaking it down part 2: Stitch and the clientside app bundle
+We use stitch for sanity
+
+
+## Breaking it down part 3: Templates for the client, templatizer
+
+
+
 
