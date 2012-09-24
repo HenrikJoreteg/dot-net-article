@@ -250,3 +250,9 @@ myHtml = templates.member({name: 'something'});
 
 
 ## Building the client
+Alright, let's build the client! A lot of that setup work is harder than the clientside code itself. Let's start our main app controller and setting up the client.
+
+
+
+
+
