@@ -198,11 +198,55 @@ app.get('/', andbangAuth.secure(), function (req, res) {
 ```
 
 ## Breaking it down part 2: Stitch and the clientside app bundle
-We use stitch for sanity
+We use [stitch](https://github.com/sstephenson/stitch) written by [Sam Stephenson](https://twitter.com/sstephenson) of 37signals. This lets us keep our code cleanly seperated into modules that do one thing. 
 
+If you're unfamiliar with CommonJS modules, it's a patterns for structuring modules where you explicitly `require` other modules you want to use and `export` functions or objects that you want to make available to other modules. 
+
+Nothing has done more for the cleanliness of my clientside applications that switching to this approach. Since node.js also uses this module system it also has the added benefit of letting me re-use a module on the server or client.
+
+In addition it lets you structure your code into as many files and folders as make sense to you, and not worry about what that does to the various `<script>` tags in your html.
+
+Stitch simply takes your folder structure and builds and concatenates all of it into a single JS file. 
+
+It also supports using regular JS libraries that are not written in the CommonJS style, like jQuery for example.
+
+For other files that we want to include, we simply list them out as dependencies, in the order we want them like so: 
+
+```js
+var clientSideJS = stitch.createPackage({
+        paths: [__dirname + '/clientmodules', __dirname + '/clientapp'],
+        dependencies: [
+            __dirname + '/public/jquery.js',
+            __dirname + '/public/d3.v2.js',
+            __dirname + '/public/sugar-1.2.1-dates.js',
+            __dirname + '/public/socket.io.js',
+            __dirname + '/public/init.js'
+        ]
+    });
+
+```
+Later we can just that bundle as it were a server. This lets us make changes to modules and not have to worry about restarting or recompiling anything. Stitch handles that for us during development. When it comes time to put this in production you can use stitch to instead just write the file to disk and serve it statically.
+
+```js
+app.get('/&!-dashboard.js', clientSideJS.createServer());
+``` 
 
 ## Breaking it down part 3: Templates for the client, templatizer
+I recently wrote a whole post on client-side templating that got a pile of attention on hacker news. The core of it being that sending a whole templating engine to the browser is silly. It's much faster and more efficient to pre-compile templates into vanilla javascript and just send your templates as plain javascript functions to the browser. The problem was, until recently, there haven't been that many template engines that made that pre-compilation step easy to use. 
+
+I wrote a tool called [templatizer](https://github.com/HenrikJoreteg/templatizer) that takes a folder of jade templates and creates a single js file with a function for each template file. That's the approach we're using in the app in the following line pulled from server.js:
+
+```js
+templatizer(__dirname + '/clienttemplates', __dirname + '/clientmodules/templates.js');
+```
+
+So, when the app executes it creates a template modules and puts it into our client modules directory. Now we can just rendering html becomes as easy as this:
+
+```js
+var templates = require('templates');
+
+myHtml = templates.member({name: 'something'});
+```
 
 
-
-
+## Building the client
