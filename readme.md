@@ -16,7 +16,7 @@ When you duplicate state, you increase complexity. Because now, rather than worr
 
 I know what you're probably thinking. Some framework is going to come along that solves this problem for me. You may be right, there are many different approaches to dealing with the problems of duplicated state. There are many frameworks such as Meteor.js, SocketStream, and Derby.js that aim to simplify the process of building apps that work this way. 
 
-The challenge with those frameworks, from where I sit, is that there's a lot of emphasis on trying to share code and share everything between the client and the server when client/server really should be performing fundamentally different roles. Servers are for data, clients are for presentation. To me, this is just basic seperation of concerns when it comes to code. When you try to share too much server code with a browser you've instantly coupled your application to that particular client. This makes it much harder to build other clients, say for example a native iOS app for your app.
+The challenge with those frameworks, from where I sit, is that there's a lot of emphasis on trying to share code and share everything between the client and the server when client/server really should be performing fundamentally different roles. Servers are for data, clients are for presentation. To me, this is just basic seperation of concerns when it comes to code. When you try to share too much server code with a browser you've instantly coupled your application to that particular client. This makes it much harder to build other clients, say for example a native iOS app for your app. So while these frameworks are useful for webapps, they may let us down a bit when we want to go beyond that. With more and more talk of "the Internet of things" We have good reason to believe that the breadth of device types that may want to talk to your app will continue to increase.
 
 ## Code structure and singe-page apps
 If we've decided that we want our server to be able to focus on data we may as well transfer as much of the rendering and presentation of client to the client. It's really complicated to rendering large portions of your page based on server state and then re-rendering other portions in the client. Once we recognize we're building a "thick" client. We may as well render it all there. 
@@ -30,7 +30,7 @@ Below is the entirety of the html we send to the browser for our product And Ban
 
 Yup, that's it (and yes, omitting `<html>`, `<head>`, and `<body>` is allowed by the HTML specs).
 
-The purpose of this extreme minimalism is primarily aesthetic. But, it also makes it  *abundantly* clear that it's the client's responsibility to render the application and manage everything within it.
+The purpose of this extreme minimalism is primarily aesthetic. But, it also makes it  *abundantly* clear that it's the client's responsibility to render the application and manage everything within it, including the page title and life-cycle of all the page elements.
 
 ## MVC or some such acronmym
 If you've ever tried to build a complex single-page app. You know that keeping your code clean and tidy is one of the toughest challenges. 
@@ -129,8 +129,7 @@ var clientSideJS = stitch.createPackage({
         paths: [__dirname + '/clientmodules', __dirname + '/clientapp'],
         dependencies: [
             __dirname + '/public/jquery.js',
-            __dirname + '/public/d3.v2.js',
-            __dirname + '/public/sugar-1.2.1-dates.js',
+            __dirname + '/public/sugar-1.3.6-dates.js',
             __dirname + '/public/socket.io.js',
             __dirname + '/public/init.js'
         ]
@@ -193,12 +192,13 @@ app.use(andbangAuth.middleware({
 Then, by securing the main route with the auth middleware, you'll immediately be re-directed to log in via andbang. You can see that in action here. Note the `andbangAuth.secure()` middleware:
 ```
 app.get('/', andbangAuth.secure(), function (req, res) {
+    res.cookie('apiToken', req.session.accessToken, {expires: new Date(Date.now() + 30000)});
     res.sendfile(__dirname + '/app.html');
 });
 ```
 
 ## Breaking it down part 2: Stitch and the clientside app bundle
-We use [stitch](https://github.com/sstephenson/stitch) written by [Sam Stephenson](https://twitter.com/sstephenson) of 37signals. This lets us keep our code cleanly seperated into modules that do one thing. 
+We use [stitch](https://github.com/sstephenson/stitch) written by [Sam Stephenson](https://twitter.com/sstephenson) of 37signals. This lets us keep our clientside code cleanly seperated into modules that only do one thing. 
 
 If you're unfamiliar with CommonJS modules, it's a patterns for structuring modules where you explicitly `require` other modules you want to use and `export` functions or objects that you want to make available to other modules. 
 
@@ -217,22 +217,21 @@ var clientSideJS = stitch.createPackage({
         paths: [__dirname + '/clientmodules', __dirname + '/clientapp'],
         dependencies: [
             __dirname + '/public/jquery.js',
-            __dirname + '/public/d3.v2.js',
-            __dirname + '/public/sugar-1.2.1-dates.js',
+            __dirname + '/public/sugar-1.3.6-dates.js',
             __dirname + '/public/socket.io.js',
             __dirname + '/public/init.js'
         ]
     });
 
 ```
-Later we can just that bundle as it were a server. This lets us make changes to modules and not have to worry about restarting or recompiling anything. Stitch handles that for us during development. When it comes time to put this in production you can use stitch to instead just write the file to disk and serve it statically.
+Later we can just that bundle as it were a server. This lets us make changes to modules and not have to worry about restarting or recompiling anything. Stitch handles that for us during development. When it comes time to put this in production you can use stitch to instead just write the file to disk then we can minify it and serve it statically.
 
 ```js
 app.get('/&!-dashboard.js', clientSideJS.createServer());
 ``` 
 
 ## Breaking it down part 3: Templates for the client, templatizer
-I recently wrote a whole post on client-side templating that got a pile of attention on hacker news. The core of it being that sending a whole templating engine to the browser is silly. It's much faster and more efficient to pre-compile templates into vanilla javascript and just send your templates as plain javascript functions to the browser. The problem was, until recently, there haven't been that many template engines that made that pre-compilation step easy to use. 
+I recently wrote a whole post on client-side templating that got a lot of attention on hacker news. The core of it being that sending a whole templating engine to the browser is silly. It's much faster and more efficient to pre-compile templates into vanilla javascript and just send your templates as plain javascript functions to the browser. This may be rather self-evident to you, but, until recently, there haven't been that many template engines that made that pre-compilation step easy to use. 
 
 I wrote a tool called [templatizer](https://github.com/HenrikJoreteg/templatizer) that takes a folder of jade templates and creates a single js file with a function for each template file. That's the approach we're using in the app in the following line pulled from server.js:
 
@@ -240,7 +239,7 @@ I wrote a tool called [templatizer](https://github.com/HenrikJoreteg/templatizer
 templatizer(__dirname + '/clienttemplates', __dirname + '/clientmodules/templates.js');
 ```
 
-So, when the app executes it creates a template modules and puts it into our client modules directory. Now we can just rendering html becomes as easy as this:
+So, when the app executes it creates a "templates" modules and puts it into our "clientModules" directory. Now rendering html becomes as easy as this:
 
 ```js
 var templates = require('templates');
@@ -250,8 +249,97 @@ myHtml = templates.member({name: 'something'});
 
 
 ## Building the client
-Alright, let's build the client! A lot of that setup work is harder than the clientside code itself. Let's start our main app controller and setting up the client.
+Alright, with the basics covered let's build the client!
 
+I like to start backbone apps by creating one main application controller. This doesn't have to be model, we just create a simple module that we'll attach to the browser window. This will be the only global we create.
+
+The controller looks something like this:
+
+
+```js
+/*global window app */
+var MainView = require('views/main'),
+    TeamModel = require('models/team'),
+    logger = require('andlog'),
+    Backbone = require('backbone'),
+    cookies = require('cookieReader'),
+    _ = require('underscore'),
+    API = require('andbang');
+
+
+module.exports = {
+    blastoff: function (spec) {
+        var self = this;
+        
+        this.api = new API();
+        this.team = new TeamModel();
+        this.view = new MainView({model: this.team});
+        
+        this.api.on('*', _.bind(this.handleApiEvent, this));
+
+        this.token = cookies('apiToken');
+        this.api.validateToken(self.token);
+
+        this.api.once('ready', function (user) {
+            self.team.set('id', user.teams[0]);
+            self.team.members.fetch();
+            self.team.shippedTasks.fetch();
+        });
+
+        return this;
+    },
+};
+```
+
+The "blastoff" function you see here is our entry point. It will create our data containers and render the main application view. 
+
+### The launch sequence
+
+Let's break down the code in our blastoff function:
+
+```js
+this.api = new API();
+this.team = new TeamModel();
+this.view = new MainView({model: this.team});
+```
+
+First we'll init our api module that we `require`'ed above. It will automatically establish an (unauthenticated) socket.io connection to the api server. Since this piece takes a bit of time we want to start this process as soon as possible in our launch sequence.
+
+We create the "team" object which we'll use as our main container for all of the application data (a.k.a "state"). The “team” object is just a backbone model, with a few collections attached. More on that later. In addition we init our main application view and pass it the team model that becomes its basis for knowing what else to render. The main app view renders itself as soon as the DOM is ready, so we don’t need to worry about that here.
+
+Next, we set up a handler for all of our API events. This is how we’ll keep our client in sync when we get updates generated by activity in the API. We’ll go into this a bit more, later.
+
+```js
+this.api.on('*', _.bind(this.handleApiEvent, this));
+```
+
+In order to identify ourselves to the API we need to pass it our access token that we got by doing oauth on the server. If you’ll recall from our server.js file, we passed the token to the client along with the html in the form of a token called “apiToken”. So now, using a little cookie reader module we can read it and use it to log into the API:
+
+```js
+this.token = cookies('apiToken');
+this.api.validateToken(self.token, function () {});
+```
+When the token is validated the API object emits a “ready” event that calls our callback with a “user” object containing details of who just logged in. This user object looks something like this:
+
+```js
+{
+    firstName: “henrik”,
+    lastName: “joreteg”,
+    teams: [“47”]
+}
+```
+
+As you can see, it includes an array of IDs for teams that we’re apart of. For the purposes of this app we’ll just pick the first one and fetch our initial member and task data.
+
+```js
+this.api.once('ready', function (user) {
+    self.team.set('id', user.teams[0]);
+    self.team.members.fetch();
+    self.team.shippedTasks.fetch();
+});
+```
+
+Generally, it’s good practice to make each model as self-managing as possible. Arguably we could have just had the team know that it should fetch its own data as soon as we knew its “id”. But, for the sake of readability and since it’s part of the application’s loading sequece. It’s nice to be able to read the code as it is written here and be able to see that it’s at this point that we fetch more data.
 
 
 
