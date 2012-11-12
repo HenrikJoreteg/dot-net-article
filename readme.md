@@ -1,4 +1,4 @@
-# Building a realtime single-page app with Backbone.js
+# Building a realtime team dashboard app with Backbone.js
 
 The future of the web is realtime. The reason I can say this with such certainty is because *it's already happening* under our noses.
 
@@ -12,11 +12,15 @@ As soon as we make any effort to keep the information on the page in sync with t
 
 As users get increasingly comfortable with that idea, we'll reach a point where always-current, self-updating information is the expectation rather than a surprise. I *promise* you, this will happen, whether you're on board or not. If you want to stay at the top of your field as a web developer, you'll have to know how to build apps that work this way.
 
-When you duplicate state, you increase complexity. Because now, rather than worrying about just rendering some data correctly, you're now caring about the "realtime" accuracy of the data that you have on the page.
+When you duplicate state, you increase complexity. Because now, rather than worrying about just rendering some data correctly, you're now caring about staleness, caching, merge conflicts.
+
+At this point, if we step back a bit and look at what we're doing, we start to realize that we're actually building a distributed system and we'll have all the same challenges that come with building distributed sytems.
 
 I know what you're probably thinking. Some framework is going to come along that solves this problem for me. You may be right, there are many different approaches to dealing with the problems of duplicated state. There are many frameworks such as Meteor.js, SocketStream, and Derby.js that aim to simplify the process of building apps that work this way. 
 
-The challenge with those frameworks, from where I sit, is that there's a lot of emphasis on trying to share code and share everything between the client and the server when client/server really should be performing fundamentally different roles. Servers are for data, clients are for presentation. To me, this is just basic seperation of concerns when it comes to code. When you try to share too much server code with a browser you've instantly coupled your application to that particular client. This makes it much harder to build other clients, say for example a native iOS app for your app. So while these frameworks are useful for webapps, they may let us down a bit when we want to go beyond that. With more and more talk of "the Internet of things" We have good reason to believe that the breadth of device types that may want to talk to your app will continue to increase.
+The challenge with those frameworks, from where I sit, is that there's a lot of emphasis on trying to share code and logic between the client and the server when client/server really should be performing fundamentally different roles. Servers are for data, clients are for presentation. To me, this is just basic seperation of concerns when it comes to code. From everything I've read and heard, the way you solve complex problems is by not solving complex problems. Instead, complex problems are solved by building small, maintainable pieces that tackle a small portion of the complex problem. 
+
+Why bring the complexity of the server to the client and vice/versa. In addition, when you try to share too much server code with a browser you've instantly coupled your application to that particular client. This makes it much harder to build other clients, say for example a native iOS app for your app. So while these frameworks are useful for webapps, they may let us down a bit when we want to go beyond that. With more and more talk of "the Internet of things" We have good reason to believe that the breadth of device types that may want to talk to your app will continue to increase.
 
 ## Code structure and singe-page apps
 If we've decided that we want our server to be able to focus on data we may as well transfer as much of the rendering and presentation of client to the client. It's really complicated to rendering large portions of your page based on server state and then re-rendering other portions in the client. Once we recognize we're building a "thick" client. We may as well render it all there. 
