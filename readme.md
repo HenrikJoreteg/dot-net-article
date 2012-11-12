@@ -42,6 +42,13 @@ Realtime apps suck without an external data source. Basically, what's the point 
 
 We'll try to keep the scope fairly narrow, but I'll be sure to throw in some goodies to keep it interesting. Hopefully it'll show you a lot of the tools and techniques needed in order to build these types of applications. The finished app is available at (github.com something, something).
 
+## Give ‘em the dashboard!
+Our final app will look like this:
+
+![“Team dashboard app screenshot”](http://cl.ly/image/1k330p2E2s3V)
+
+There’s a “card” for each member on the team. We’ll live-sort and animate these member cards based on who is online and if they’re working or not. We can also see how many items they’ve “shipped” that day based on how many little pink rockets there are on their card. Plus, recent shipped items for the whole team appear in the list on the right-hand side. Our app will only render shipped items that happened that day and will be reset at 4:00am each night.
+
 ## Basic setup
 You'll need node.js 0.8+ and npm installed on your system (these days, npm ships with node). I'm assuming a mac or linux environment, but with very minor tweaks you should be able to follow along just fine if you're on windows.
 
@@ -342,5 +349,356 @@ this.api.once('ready', function (user) {
 Generally, it’s good practice to make each model as self-managing as possible. Arguably we could have just had the team know that it should fetch its own data as soon as we knew its “id”. But, for the sake of readability and since it’s part of the application’s loading sequece. It’s nice to be able to read the code as it is written here and be able to see that it’s at this point that we fetch more data.
 
 
+## The Team Model
+Much of the data management is handled by the team model. Let’s take a look at what it does.
+
+```js
+var Backbone = require('backbone'),
+    _ = require('underscore'),
+    Members = require('models/members'),
+    ShippedTasks = require('models/shippedTasks');
 
 
+module.exports = Backbone.Model.extend({
+    initialize: function () {
+        this.members = new Members();
+        this.members.on('change:presence change:activeTaskTitle reset add', this.updateOrder, this);
+        this.shippedTasks = new ShippedTasks();
+        this.shippedTasks.on('add reset', this.updateShippedTotals, this);
+        ...
+    },
+    updateOrder: function () {
+        var sorted = this.members.sortBy(function (member) {
+                var online = member.get('presence') === 'online' ? 2 : 0,
+                    working = !!member.get('activeTask') ? 1 : 0;
+                return -(online + working);
+            });
+
+        sorted.forEach(function (member, index) {
+            member.set('order', index);
+        });
+    },
+    updateShippedTotals: function () {
+        var totals = _.countBy(this.shippedTasks.models, function (task) {
+                return task.get('shippedBy');
+            });
+
+        app.team.members.each(function (member) {
+            member.set('shippedCount', totals[member.id] || 0);
+        });
+    },
+    ...
+});
+```
+
+The “team” model contains two child collections. “members” which contains “member” models for each person on our team and the “shippedTasks” collection which stores, you guessed it, models of tasks that have been completed or “shipped”.
+
+The goal is to have our app automatically sort team members visually according to their status. If they’re online and working they should go at the top of the list, if they’re online but not working they’re next, and of they’re offline, then we put them at the bottom. In addition, any time that order changes, rather than just having them “jump” around we want to smoothly slide them around and reposition them into a grid on the page. To accomplish this effect, we’ll position the cards with “position: absolute” apply CSS3 transitions and then use JS to calculate and set their “top” and “left” values to shuffle them around. 
+
+The result is a smoothly flowing re-arrangement when the order changes. So, in process it may look something like this: ![Team member grid animation screenshot](http://cl.ly/image/1S0F3s1J3F0U)
+
+We’re not going to try to maintain a certain order within the collection itself. But rather, we’ll run a `updateOrder` function that will do this:
+- calculate what position each member should be in
+- set that position as the “order” property of that member
+
+Then, each member view can listen for changes to its “order” property and position itself accordingly.
+
+So, within this team object, any time “presence”, “activeTaskTitle” changes on a member, or we add, remove or reset the collection we want to re-run the `updateOrder` function which creates a sorted array of members, based on whether they’re online or have an active task. To get the exact order that we want we assign a different point value and return that from the `sortBy` function. We calculate a point value, we give two points if they’re online, one point if they have an active task, then sort those point totals from highest to lowest. 
+
+That way, we always have this order:
+1. Online with active task
+2. Online but no active task
+3. Offline but with an active task
+4. Offline with no active task
+
+Then we loop through the array we just created and assign an “order” value for each. Here’s the whole function:
+
+```js
+updateOrder: function () {
+    var sorted = this.members.sortBy(function (member) {
+            var online = member.get('presence') === 'online' ? 2 : 0,
+                working = !!member.get('activeTask') ? 1 : 0;
+            return -(online + working);
+        });
+
+    sorted.forEach(function (member, index) {
+        member.set('order', index);
+    });
+},
+```
+
+Similarly, we also want to maintain a count for each member of how many things they’ve shipped that day. So, we’ve also registered a use `updateShippedTotals` handler that calculates that value for each member, each time something new gets added to the “shippedTasks” collection or the collection gets reset. 
+
+In addition, we create a function that gets called at a regular interval. It’s job is to set a string such as “thursday” as the “day” attribute of team. That way, if it changes we reset our collection of shipped tasks. For the purposes of this app, we’ll consider anything before 4:00AM to be the same day. Since, for many up-late-at-night coders, midnight is when they start hitting their stride.
+
+### A quick note on handling dates
+Date math is hard, seriously. It’s a giant pain when you try to do anything complex and you’re just using vanilla JS. I’d strongly suggest using some sort of date utility. My personal favorite is the “dates” module of Sugar.js. I don’t necessarily like to extend native objects too much, but to me, the pain of manipulating, comparing and parsing dates in JS makes this worth it. For example, we do `Date.create().addHours(-4).format('{weekday}’)` to create a current date, subtract four hours and turn the resulting date into a string that represents the current weekday in a nice, legible way. This alone is perhaps not worth using a library for, but being able to do stuff like `Date.create().isAfter('March 1st’)` is priceless. This is also great for parsing user input. To see what else you can do check out [http://sugarjs.com/dates](http://sugarjs.com/dates).You can create a custom sugar.js build that only includes the date functionality. It works in node.js too. I highly recommend it.
+
+## The Member model
+Our member models are pretty straight forward:
+
+```js
+var Backbone = require('backbone'),
+    _ = require('underscore');
+
+module.exports = Backbone.Model.extend({
+    defaults: {
+        shippedCount: 0
+    },
+    initialize: function () {
+        this.on('change:activeTask', this.handleActiveTaskChange, this);
+        this.handleActiveTaskChange();     
+    },
+    handleActiveTaskChange: function (model, val) {
+        var self = this,
+            activeTaskId = this.get('activeTask') || '';
+        
+        if (activeTaskId === '') {
+            self.set('activeTaskTitle', '');
+        } else {
+            app.api.getTask(app.team.id, activeTaskId, function (err, task) {
+                if (task) self.set('activeTaskTitle', task.title);
+            });
+        }
+    },
+    fullName: function () {
+        return this.get('firstName') + ' ' + this.get('lastName');
+    },
+    picUrl: function () {
+        return 'https://api.andbang.com/teams/' + app.team.id + '/members/' + this.id + '/image';
+    }
+});
+```
+
+We start by establishing a default value for number of things shipped. We also want to maintain a task title for each member who is currently working on something. But, when we initially requested the member data from the API we only get a “activeTask” attribute as an ID. So, we register a handler that fetches the task title each time our “activeTask” value changes. It then sets it as a property directly on the model itself. This way, we should always be able to just render the “activeTaskTitle”.
+
+In addition we have a couple of convenience methods for retrieving a URL we can use to get the users avatar and their full name.
+
+## The main view
+
+It’s the main view’s job to render everything in the `<body>` tag. In our app we hand it the “team” model as its root model.
+
+```js
+var BaseView = require('views/base'),
+    _ = require('underscore'),
+    templates = require('templates'),
+    MemberView = require('views/member');
+    
+module.exports = BaseView.extend({
+    initialize: function () {    
+        this.model.shippedTasks.on('add', this.handleNewTask, this);
+        this.model.shippedTasks.on('reset', this.handleTasksReset, this);
+        this.model.members.on('add', this.handleNewMember, this);
+        this.model.members.on('reset', this.handleMembersReset, this);
+        $(_.bind(this.render, this));
+    },
+    render: function () {
+        this.setElement($('body')[0]);
+        this.$el.html(templates.app());
+    },
+    handleNewTask: function (model) {
+        this.$('.shippedContainer').prepend(templates.shipped({task: model}));
+    },
+    handleTasksReset: function () {
+        this.$('.shippedContainer').empty();
+    },
+    handleMembersReset: function () {
+        this.model.members.each(this.handleNewMember, this);
+    },
+    handleNewMember: function (member) {
+        var peopleContainer = this.$('.people'),
+            view = new MemberView({model: member});
+        peopleContainer.append(view.render().el);
+    }
+});
+```
+
+You’ll notice that we start by registering some handlers for “add” and “reset” events for both “shippedTasks” and “members”. Shipped tasks are basically just a log. When we get new ones, we want to render a template for them and add it to the “shippedContainer” element. Handling new members is a bit more complex, because we want to be able to store some additional logic in each member view to handle changes to the member objects. So for each of these we actually create a new “MemberView” and pass it the “member” object it represents. Then we render that view and append it to its container.
+
+## The Member View
+
+The member view contains a lot of what makes the app fun. 
+
+It has a few specific tasks it needs to perform:
+- Maintain it’s own physical width and position on the page.
+- Maintain a class of “online” or “offline” based on the user’s presence.
+- Add/remove an “active” class on its container based on whether a user has an active task or not.
+- Draw one pink rocket for each “shipped” item.
+- Remove itself from the DOM if the member is removed.
+
+
+```js
+var BaseView = require('views/base'),
+    _ = require('underscore'),
+    templates = require('templates');
+
+module.exports = BaseView.extend({
+    contentBindings: {
+        activeTaskTitle: '.activeTask'
+    },
+    classBindings: {
+        presence: ''
+    },
+    render: function () {
+        this.setElement(templates.member({member: this.model}));
+        this.handleBindings();
+        this.model.on('remove', this.destroy, this);
+        this.model.on('change:order', this.handleChangeOrder, this);
+        this.model.on('change:activeTask', this.handleActiveTaskChange, this);
+        this.model.on('change:shippedCount', this.handleShippedCountChange, this);
+        $(window).on('resize', _.bind(this.handleChangeOrder, this));
+
+        this.handleChangeOrder();
+        this.handleActiveTaskChange();
+        this.handleShippedCountChange();
+
+        return this;
+    },
+    handleChangeOrder: function () {
+        var order = this.model.get('order'),
+            windowWidth = window.innerWidth,
+            minimumWidth = 290,
+            numberOfColumns = Math.floor((windowWidth - minimumWidth) / minimumWidth),
+            columnWidth = (windowWidth / (numberOfColumns + 1)) - 10,
+            row = Math.floor(order / numberOfColumns),
+            column = order % numberOfColumns,
+            rowHeight = 150;
+        
+        this.$el.css({
+            top: (row * rowHeight) + 'px',
+            left: (column * columnWidth) + 'px',
+            width: (columnWidth - 10) + 'px'
+        });
+
+        $('.shippedContainer').css('width', columnWidth + 'px');
+    },
+    handleActiveTaskChange: function () {
+        this.$el[this.model.get('activeTask') ? 'addClass' : 'removeClass']('active');
+    },
+    handleShippedCountChange: function () {
+        var i = this.model.get('shippedCount'),
+            container = this.$('.shippedCount');
+        
+        container.empty();
+        while (i--) {
+            container.append(templates.rocket());
+        }
+    },
+    destroy: function () {
+        this.model.off();
+        this.remove();
+    }
+});
+```
+
+We start with two declarative bindings. These are not part of backbone.js but if you look at the “clientapp/views/base.js” file you’ll see what they do. 
+
+- `contentBindings` keep the property you enter bound to the selector you provide.
+- `classBindings` bind the property you provide as a class on whatever element selector you give it. In this case, doing empty string means maintaining a class on `this.el` itself.
+
+It’s really in `handleChangeOrder` that we get fancy. Anytime this model’s “order” attribute is set or the window is resized we recalculate it’s physical size and position. This setup allows us to create an animated responsive layout. Which is handy for a dashbaord app that could be rendered on a 73" LED tv or someone’s little laptop. The math here will calculate an appropriate amount of columns and cell widths and set it directly on the element itself. By doing this, we get the animation and tweening for free by simply setting a transition in our CSS using CSS3 transitions.
+
+We also bind a `destroy` method to our model that gets called if a model is removed. That way our view unbinds any handlers and calls backbone’s `remove` method to remove this element from the DOM.
+
+## Wiring it all up to receive events from the API
+The big piece that’s left is actually making sure that we properly handle updates we receive from the API. Luckily, it’s actually quite simple. This is where we make use of that wildcard event handler we talked about in our controller.
+
+Look at the bottom of that controller and you’ll see our handler. It looks like this:
+
+```js
+handleApiEvent: function (eventtype, payload) {
+    if (payload && payload.crud && payload.category === 'team' && payload.instance === app.team.id) {
+        payload.crud.forEach(function (item) {
+            var type = item.type,
+                model,
+                collection;
+            
+            if (type === 'update') {
+                logger.log('got an update', item);
+                model = app.findModel(item.object, item.id);
+                if (model) {
+                    model.set(item.data);
+                }
+                if (eventtype === 'shipTask' && item.object === 'task') {
+                     app.team.shippedTasks.add(item.data);
+                }
+                
+            } else if (type === 'create' && item.object === 'member') {
+                logger.log('got a create');
+                collection = app.findCollection(item.object);
+                if (collection) {
+                    collection.add(item.data);
+                }
+            } else if (type === 'delete') {
+                logger.log('got a delete');
+                model = app.findModel(item.object, item.id);
+                if (model) {
+                        model.collection.remove(model);
+                }
+            }
+        });
+    }
+}
+```
+
+This is all that is required to keep all of our models in sync with what’s going on, in the rest of the team.
+
+This is due to the fact that each event type that involves a modification of state for the team you’re logged in as will include a "crud" attribute. 
+
+A typical event will look something like this:
+
+```json
+{
+  "action": {
+    "when": "1352711565839",
+    "presence": "offline",
+    "who": "4"
+  },
+  "category": "team",
+  "instance": "1",
+  "crud": [
+    {
+      "id": "4",
+      "type": "update",
+      "object": "member",
+      "data": {
+        "presence": "offline"
+      }
+    }
+  ],
+  "eventNumber": 19277
+}
+```
+
+There is some various meta data, etc. But for our purposes, the only thing we care about are the "crud" portions of the event. As you probably suspected, "crud" stands for "Create", "Read", "Update" and "Delete". A given action, by another member of your team could result in multiple data changes that you need to make in order to keep your app in sync. 
+
+Crud events have the following attributes:
+1. type - "create", "update", "delete"
+2. object - The type of object being referred to. For example "task", "member", or "team".
+3. id - The id of the object being referred to.
+4. data - The new properties in the cases of "create" and "update".
+
+Now for each incoming event we loop through each item in the "crud" array and handle it. 
+
+For "create" we use the object type to look up the corresponding backbone collection and simply add the contents of the "data" attribute to the collection. Assuming your app is configured properly this will create a model and add it to the collection. 
+
+For "delete" we use the object type and ID to look up the model and remove it from its collection.
+
+For "update" we use the object type and ID to look up the model and then simply call "set" on that model with the contents of the "data" attributes.
+
+Since by default you are subscribed to each team that you’re on, you’ll notice we do a bit of checking to make sure that payload "category" and "instance" attributes match the team we’re trying to update. Another quirk for our particular usecase here is that we only care about "shipped" tasks. But, shipping a task is not a "create" as far as the API is concerned because the task already existed. So we have a special case inside our "update" to handle event type "shipTask" as a "create" event.
+
+But, the neat thing is, that with these twenty-some lines of code any changes that any other team members make will be reflected in our local model state.
+
+## Bam!
+Hope you had fun and learned something. Now you know how to build a simple, but very useful realtime, singlepage app in backbone.js.
+
+I’m @HenrikJoreteg on twitter. Be sure to ping me on twitter with any thoughts, questions or feedback. I’d love to hear from you.
+
+## Resources
+- Dashboard application source code: [https://github.com/HenrikJoreteg/dotnet-dashboard.andbang.com](https://github.com/HenrikJoreteg/dotnet-dashboard.andbang.com)
+- Hosted version of this app: (tbd)
+- Backbone.js docs: [http://backbonejs.org](http://backbonejs.org)
+- Andbang API docs: [https://docs.andbang.com](https://docs.andbang.com)
+- Sugar.js Date docs: [http://sugarjs.com/dates](http://sugarjs.com/dates)
+- andyet.com blog posts related to JS: [http://blog.andyet.com/tag/javascript/](http://blog.andyet.com/tag/javascript/)
