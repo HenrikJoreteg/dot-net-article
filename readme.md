@@ -6,7 +6,7 @@ Facebook, gmail, gtalk, github just to name a few, have all implemented some for
 
 In some cases this is as simple as the page automatically polling to see if there's something new. In other cases it's more advanced where all the data used to build and update the page is coming over an open websocket connection. For our purposes, the transport mechanism is largerly irrelevant, the point is, data comes to you.
 
-This inherently breaks the statelessness of webpages. It used to be that I hit a URL and got back a webpage. I understood that the information on the page was accurate as of the time it was requested. If I wanted a newer state, I'd go ask for it again and got another snapshot in time.
+This inherently breaks the statelessness of webpages. It used to be that I hit a URL and got back a webpage. As a user I understood that the information on the page was accurate as of the time it was requested. If I wanted to check for something new, I'd go ask for it again and got another snapshot in time.
 
 As soon as we make any effort to keep the information on the page in sync with the server, we've now acknowledged that the webpage has "state". The page always had state, but, when we as developers decide we want to do partial updates of the page, the only way we can do so is by knowing what we currently have and comparing it to the server. State duplication has occured and we're now maintaining "state" in some form in the client.
 
@@ -45,7 +45,7 @@ We'll try to keep the scope fairly narrow, but I'll be sure to throw in some goo
 ## Give ‘em the dashboard!
 Our final app will look like this:
 
-!["Team dashboard app screenshot"](http://cl.ly/image/1k330p2E2s3V)
+!["Team dashboard app screenshot"](http://f.cl.ly/items/2w010C3Q0G1W1c1N3H2R/Screen%20Shot%202012-11-12%20at%2012.22.00%20AM.png)
 
 There's a "card" for each member on the team. We'll live-sort and animate these member cards based on who is online and if they're working or not. We can also see how many items they've "shipped" that day based on how many little pink rockets there are on their card. Plus, recent shipped items for the whole team appear in the list on the right-hand side. Our app will only render shipped items that happened that day and will be reset at 4:00am each night.
 
@@ -324,7 +324,7 @@ In order to identify ourselves to the API we need to pass it our access token th
 
 ```js
 this.token = cookies('apiToken');
-this.api.validateToken(self.token, function () {});
+this.api.validateToken(self.token);
 ```
 When the token is validated the API object emits a "ready" event that calls our callback with a "user" object containing details of who just logged in. This user object looks something like this:
 
@@ -395,7 +395,7 @@ The "team" model contains two child collections. "members" which contains "membe
 
 The goal is to have our app automatically sort team members visually according to their status. If they're online and working they should go at the top of the list, if they're online but not working they're next, and of they're offline, then we put them at the bottom. In addition, any time that order changes, rather than just having them "jump" around we want to smoothly slide them around and reposition them into a grid on the page. To accomplish this effect, we'll position the cards with "position: absolute" apply CSS3 transitions and then use JS to calculate and set their "top" and "left" values to shuffle them around. 
 
-The result is a smoothly flowing re-arrangement when the order changes. So, in process it may look something like this: ![Team member grid animation screenshot](http://cl.ly/image/1S0F3s1J3F0U)
+The result is a smoothly flowing re-arrangement when the order changes. So, in process it may look something like this: ![Team member grid animation screenshot](http://f.cl.ly/items/0Z0s3J2L190j43193A0T/Screen%20Shot%202012-11-12%20at%2012.30.18%20AM.png)
 
 We're not going to try to maintain a certain order within the collection itself. But rather, we'll run a `updateOrder` function that will do this:
 - calculate what position each member should be in
